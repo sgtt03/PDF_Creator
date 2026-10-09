@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>تحويل الصور إلى PDF</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f6f5f1;--card:#fff;--text:#1d1d1b;--muted:#6b6a65;--line:#dcdad2;--accent:#0f6e56;--accent-t:#fff;--danger:#b3261e}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161615;--card:#212120;--text:#efede6;--muted:#a09e96;--line:#3a3a37;--accent:#3ec9a0;--accent-t:#06231b;--danger:#f2877f}}
+:root[data-theme="dark"]{--bg:#161615;--card:#212120;--text:#efede6;--muted:#a09e96;--line:#3a3a37;--accent:#3ec9a0;--accent-t:#06231b;--danger:#f2877f}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",Tahoma,"Noto Naskh Arabic",system-ui,sans-serif;line-height:1.5}
+main{max-width:760px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:1.5rem;margin:0 0 4px}
+p.sub{margin:0 0 18px;color:var(--muted)}
+#drop{border:2px dashed var(--line);border-radius:14px;background:var(--card);padding:34px 16px;text-align:center;cursor:pointer;transition:.15s}
+#drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--card))}
+#drop b{display:block;font-size:1.05rem;margin-bottom:4px}
+#drop span{color:var(--muted);font-size:.9rem}
+#list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin:18px 0;padding:0;list-style:none}
+.item{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.item img{width:100%;height:120px;object-fit:cover;background:var(--line)}
+.item .nm{font-size:.75rem;color:var(--muted);padding:6px 8px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:ltr;text-align:right}
+.item .ac{display:flex;gap:4px;padding:6px 8px 8px;align-items:center}
+.item .ac .n{flex:1;font-weight:600;font-size:.85rem}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;padding:4px 9px}
+button:hover:not(:disabled){border-color:var(--accent)}
+button:disabled{opacity:.4;cursor:default}
+.x{color:var(--danger)}
+.opts{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+label{display:flex;flex-direction:column;gap:4px;font-size:.88rem;color:var(--muted)}
+select,input[type=text]{font:inherit;padding:7px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+.bar{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+.primary{background:var(--accent);color:var(--accent-t);border-color:var(--accent);font-weight:700;padding:11px 22px;font-size:1rem}
+#msg{margin-top:12px;color:var(--muted);min-height:1.4em}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>🖼️ تحويل الصور إلى PDF</h1>
+  <p class="sub">كل شيء يتم داخل المتصفح، والصور لا تُرفع لأي سيرفر.</p>
+
+  <div id="drop" tabindex="0">
+    <b>اسحب الصور هنا أو اضغط للاختيار</b>
+    <span>JPG · PNG · WEBP · GIF — يمكنك اختيار عدة صور</span>
+  </div>
+  <input id="file" type="file" accept="image/*" multiple class="hide">
+
+  <ul id="list"></ul>
+
+  <div id="panel" class="hide">
+    <div class="opts">
+      <label>مقاس الصفحة
+        <select id="size">
+          <option value="a4">A4</option>
+          <option value="letter">Letter</option>
+          <option value="fit">نفس مقاس الصورة</option>
+        </select>
+      </label>
+      <label>الاتجاه
+        <select id="orient">
+          <option value="auto">تلقائي حسب الصورة</option>
+          <option value="p">طولي</option>
+          <option value="l">عرضي</option>
+        </select>
+      </label>
+      <label>الهوامش
+        <select id="margin">
+          <option value="0">بدون</option>
+          <option value="10" selected>صغيرة</option>
+          <option value="20">متوسطة</option>
+        </select>
+      </label>
+      <label>اسم الملف
+        <input id="name" type="text" value="images" dir="ltr">
+      </label>
+    </div>
+    <div class="bar">
+      <button id="go" class="primary">إنشاء وتنزيل PDF</button>
+      <button id="clear">مسح الكل</button>
+    </div>
+  </div>
+  <div id="msg"></div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let items = []; // {name, url, w, h}
+
+function addFiles(files){
+  [...files].filter(f => f.type.startsWith("image/")).forEach(f => {
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => { items.push({name:f.name, url, w:img.naturalWidth, h:img.naturalHeight}); render(); };
+    img.onerror = () => { $("msg").textContent = "تعذّر قراءة الملف: " + f.name; };
+    img.src = url;
+  });
+}
+
+function render(){
+  const ul = $("list"); ul.innerHTML = "";
+  items.forEach((it,i) => {
+    const li = document.createElement("li"); li.className = "item";
+    const im = document.createElement("img"); im.src = it.url; im.alt = "";
+    const nm = document.createElement("div"); nm.className = "nm"; nm.textContent = it.name;
+    const ac = document.createElement("div"); ac.className = "ac";
+    const n = document.createElement("span"); n.className = "n"; n.textContent = i+1;
+    const mk = (t, fn, dis, cls) => { const b = document.createElement("button"); b.textContent = t; b.disabled = !!dis; if(cls) b.className = cls; b.onclick = fn; return b; };
+    ac.append(n,
+      mk("▶", () => move(i,-1), i===0),      // RTL: ▶ moves toward the start
+      mk("◀", () => move(i,1), i===items.length-1),
+      mk("✕", () => { URL.revokeObjectURL(it.url); items.splice(i,1); render(); }, false, "x"));
+    li.append(im, nm, ac); ul.append(li);
+  });
+  $("panel").classList.toggle("hide", items.length === 0);
+}
+function move(i,d){ const j=i+d; [items[i],items[j]] = [items[j],items[i]]; render(); }
+
+const drop = $("drop"), file = $("file");
+drop.onclick = () => file.click();
+drop.onkeydown = e => { if(e.key==="Enter"||e.key===" "){ e.preventDefault(); file.click(); } };
+file.onchange = () => { addFiles(file.files); file.value = ""; };
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => addFiles(e.dataTransfer.files));
+$("clear").onclick = () => { items.forEach(i => URL.revokeObjectURL(i.url)); items = []; $("msg").textContent = ""; render(); };
+
+// Draw to canvas -> JPEG (handles png/webp/gif; transparency becomes white)
+function toJpeg(it){
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas"); c.width = it.w; c.height = it.h;
+      const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0,0,c.width,c.height); x.drawImage(img,0,0);
+      res(c.toDataURL("image/jpeg", 0.92));
+    };
+    img.onerror = rej; img.src = it.url;
+  });
+}
+
+$("go").onclick = async () => {
+  const msg = $("msg"), btn = $("go");
+  if(!items.length) return;
+  btn.disabled = true; msg.textContent = "جارٍ إنشاء الملف…";
+  try{
+    const { jsPDF } = window.jspdf;
+    const size = $("size").value, orient = $("orient").value, m = +$("margin").value;
+    let doc = null;
+    for(let i=0;i<items.length;i++){
+      const it = items[i];
+      const data = await toJpeg(it);
+      const landscape = orient==="auto" ? it.w > it.h : orient==="l";
+      let pw, ph, fmt, o = landscape ? "l" : "p";
+      if(size==="fit"){ const k = 0.264583; pw = it.w*k; ph = it.h*k; fmt = [pw,ph]; o = pw>ph ? "l":"p"; }
+      else { fmt = size; }
+      if(!doc) doc = new jsPDF({orientation:o, unit:"mm", format:fmt});
+      else doc.addPage(fmt, o);
+      pw = doc.internal.pageSize.getWidth(); ph = doc.internal.pageSize.getHeight();
+      const mm = size==="fit" ? 0 : m;
+      const aw = pw-2*mm, ah = ph-2*mm, r = Math.min(aw/it.w, ah/it.h);
+      const w = it.w*r, h = it.h*r;
+      doc.addImage(data, "JPEG", (pw-w)/2, (ph-h)/2, w, h);
+      msg.textContent = `جارٍ المعالجة… ${i+1}/${items.length}`;
+    }
+    const blob = doc.output("blob");
+    const fname = ($("name").value.trim() || "images").replace(/[\\\/"']/g,"") + ".pdf";
+    const dl = window.claude && await claude.use("downloads");
+    if(dl){
+      await dl.save({filename:fname, data:blob});
+      msg.textContent = "تم ✔";
+    } else {
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname;
+      document.body.appendChild(a); a.click(); a.remove();
+      msg.textContent = "تم ✔";
+    }
+  }catch(e){
+    msg.textContent = e && e.code==="declined" ? "تم إلغاء التنزيل." : "حدث خطأ: " + (e && e.message || e);
+  }finally{ btn.disabled = false; }
+};
+</script>
+</body>
+</html>
